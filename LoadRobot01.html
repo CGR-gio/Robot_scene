@@ -1,0 +1,684 @@
+
+
+<!DOCTYPE html>
+<html>
+<head includeDefault="true">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+  <title>机器人加载</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    #label {
+      position: absolute;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.6);
+      line-height: 1;
+      border-radius: 5px;
+    }
+     #progressBox {
+       width: 300px;
+       height: 40px;
+       border: 1px solid #C8C8C8;
+       background: white;
+       position: absolute;
+       margin: 0 auto;
+       margin-top: 100px;
+     }
+
+    #progressBar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 2;
+      height: 40px;
+      width: 100%;
+      line-height: 40px;
+      color: white;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      font-family: Georgia;
+      clip: rect(0px, 0, 40px, 0px);
+      background: #00A1F5;
+    }
+
+    #progressText {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 1;
+      width: 100%;
+      height: 40px;
+      line-height: 40px;
+      color: black;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      font-family: Georgia;
+    }
+  </style>
+  <script src="./js/three.js"></script>
+  <script src="./js/GLTFLoader.js"></script>
+  <script src="./js/OrbitControls.js"></script>
+  <script src='./js/ThreeJs_Composer.js'></script>
+  <script src="./js/EffectComposer.js"></script>
+  <script src="./js/RenderPass.js"></script>
+  <script src="./js/OutlinePass.js"></script>
+  <script src="./js/FXAAShader.js"></script>
+  <script src="./js/CopyShader.js"></script>
+  <script src="./js/ShaderPass.js"></script>
+  <script src='./js/jquery-1.11.0.min.js'></script>
+
+</head>
+
+<body>
+<div id="label"></div>
+<div id="progressBox">
+  <div id="progressBar">0%</div>
+  <!-- 设定第二个层以便当进度超过文字的时候，修改文字的颜色 -->
+  <div id="progressText">0%</div>
+</div>
+<div id="container"></div>
+  <script>
+      function progressFn(cent) {
+          var oDiv1 = document.getElementById('progressBox');
+
+          var oDiv2 = document.getElementById('progressBar');
+
+          var oDiv3 = document.getElementById('progressText');
+
+          var allWidth = parseInt(getStyle(oDiv1,'width'));
+
+          oDiv2.innerHTML = cent + '%';
+          oDiv3.innerHTML = cent + '%';
+
+          oDiv2.style.clip = 'rect(0px, ' + cent / 100 * allWidth + 'px, 40px, 0px)';
+
+          //获取当前元素的属性值
+          function getStyle(obj, attr) {
+              //兼之IE
+              if (obj.currentStyle) {
+                  return obj.currentStyle[attr];
+              }
+              else {
+                  //第二个参数为false是通用的写法，目的是为了兼容老版本
+                  return getComputedStyle(obj, false)[attr];
+              }
+          }
+      }
+  </script>
+  <script>
+    var scene,camera,renderer,controls;
+    var width,height,composer;
+    var uvSpeed = 0.006;
+
+    //region *************************初始化***************************
+    //初始化场景
+    function initScene() {
+        scene = new THREE.Scene();
+        //scene.fog = new THREE.Fog( scene.background, 3000, 5000 );
+    }
+
+    //初始化相机
+    function initCamera(){
+        /**透视投影相机对象*/
+        width = window.innerWidth; //窗口宽度
+        height = window.innerHeight; //窗口高度
+        camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
+        camera.position.set(300, 300, 300); //设置相机位置
+        camera.lookAt(scene.position); //设置相机方向(指向的场景对象)
+
+    }
+
+    // 初始化GUI
+    function initGui() {
+        options = new function () {
+            this.batchNo ='';this.qty = 0;this.qtyUom ='';this.qty2 = 0;
+            this.实时全景监控 = function() {
+                window.open("3DVideo.html");
+            };
+        };
+        var gui = new dat.GUI();
+        gui.domElement.style = 'position:absolute;top:10px;right:0px;height:600px';
+        gui.add(options, 'batchNo').name("物料批号：").listen();
+        gui.add(options, 'qty').name("数量：").listen();
+        gui.add(options, 'qtyUom').name("单位：").listen();
+        gui.add(options, 'qty2').name("件数：").listen();
+        gui.add(options, '实时全景监控');
+    }
+
+    //初始化灯光
+    function initLight() {
+        var directionalLight = new  THREE.DirectionalLight(0xffffff,1); //模拟太阳光
+        //directionalLight.color.setHSL(0.1,1,0.95);
+        directionalLight.position.set(5,10,7.5);
+        directionalLight.shadowRadius =1;
+        scene.add(directionalLight);
+
+        var directionalLight1 = new THREE.DirectionalLight(0xffffff,1); //模拟太阳光
+        //directionalLight.color.setHSL(0.1,1,0.95);
+        directionalLight1.position.set(-5,10,-7.5);
+        directionalLight1.shadowRadius =1;
+        scene.add(directionalLight1);
+
+    }
+
+    //初始化渲染器
+    function initRenderer() {
+        renderer = new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(width, height); //设置渲染区域尺寸
+        renderer.setClearColor(0x999999, 1); //设置背景颜色
+        document.body.appendChild(renderer.domElement); //body元素中插入canvas对象
+    }
+
+    // 初始化轨迹球控件
+    function initControls() {
+        controls = new THREE.OrbitControls( camera, renderer.domElement );
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.5;
+
+        // 视角最小距离
+        controls.minDistance = 0;
+        // 视角最远距离
+        controls.maxDistance = 500;
+        // 最大角度
+        //controls.maxPolarAngle = Math.PI/2.2;
+    }
+
+    var clock = new THREE.Clock();
+    // 更新控件
+    function update() {
+        controls.update();
+        //composer.render();
+
+        var delta = clock.getDelta(); // clock is an instance of THREE.Clock
+        if ( mixer ) mixer.update( delta );
+
+        if(texture != null){
+            texture.offset.y -= uvSpeed;
+        }
+    }
+
+    // 初始化
+    function init() {
+
+        initLoadManager();
+        initScene();
+        initCamera();
+        initRenderer();
+        initLight();
+        initControls();
+        //var axis = new THREE.AxesHelper(100);
+        //scene.add(axis);
+
+        initModel();
+        //cpser =LineBring(renderer,scene,camera);
+
+
+        //添加选中时的蒙版
+        //composer = new THREE.ThreeJs_Composer(renderer, scene, camera);
+    }
+
+    // 窗口变动触发的方法
+    function onResize() {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+        update();
+    }
+    init();
+    animate();
+    window.addEventListener('resize', onResize,false);
+
+    //endregion
+
+    var model;
+    var mixer;
+    var clock = new THREE.Clock();
+    var texture = null;
+
+    var body_material,body_material02,cam_material,cam_material02,line_material,pan_material,jiazi01_material,jiazi02_material,chuanshudai_material = null;
+
+    var manager;
+    var textureLoader = new THREE.TextureLoader(manager);
+    var loader;
+
+    //加载进度管理器
+    function initLoadManager() {
+        manager = new THREE.LoadingManager();
+
+        manager.onStart = function ( url, itemsLoaded, itemsTotal ) {
+
+            console.log( 'Started loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+
+        };
+
+        manager.onLoad = function ( ) {
+
+            console.log( 'Loading complete!');
+            document.getElementById('progressBox').style.display='none';
+        };
+
+        manager.onProgress = function ( url, itemsLoaded, itemsTotal ) {
+
+            console.log( 'Loading file: ' + url + '.\nLoaded ' + itemsLoaded + ' of ' + itemsTotal + ' files.' );
+            var len = Math.floor((itemsLoaded/itemsTotal)*100);
+            console.log(len);
+            progressFn(len);
+
+        };
+
+        manager.onError = function ( url ) {
+
+            console.log( 'There was an error loading ' + url );
+
+        };
+    }
+
+    //加载模型
+    function initModel() {
+        loader = new THREE.GLTFLoader(manager);
+        //region ***************加载GLTF模型*************************
+        var loadModel = function (gltf) {
+            gltf.scene.scale.set(1,1,1);
+            model =gltf.scene;
+            scene.add(gltf.scene);
+
+            BoundingBox(model);
+            //调用动画
+            var animation = gltf.animations;
+            mixer = new THREE.AnimationMixer(model);
+            var action = mixer.clipAction(animation[0]);
+            action.play();
+            initMaterial();
+        };
+
+        loader.load('./model/robot_v2/scene.gltf',loadModel);
+
+        //endregion
+    }
+
+    //加载材质
+    function initMaterial() {
+
+        //region *************************机械臂身体贴图************************************
+        var skin_Path = './model/robotTex/camera_partB/';
+        var skin_textures={
+            'baseColor':{
+                url:skin_Path + 'Robot_body_base_color.png',
+                tex:textureLoader.load(skin_Path + 'Robot_body_base_color.png')
+            },
+            'metalness':{
+                url:skin_Path + 'Robot_body_metallic.png',
+                tex:textureLoader.load(skin_Path + 'Robot_body_metallic.png')
+            },
+            'normal':{
+                url:skin_Path + 'Robot_body_normal.png',
+                tex:textureLoader.load(skin_Path + 'Robot_body_normal.png')
+            },
+            'roughness':{
+                url:skin_Path + 'Robot_body_roughness.png',
+                tex:textureLoader.load(skin_Path + 'Robot_body_roughness.png')
+            },
+            'ao':{
+                url:skin_Path + 'Robot_body_AO.png',
+                tex:textureLoader.load(skin_Path + 'Robot_body_AO.png')
+            }
+        };
+
+        body_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: skin_textures.baseColor.tex,
+            metalnessMap: skin_textures.metalness.tex,
+            metalness: 1,
+            normalMap: skin_textures.normal.tex,
+            roughnessMap: skin_textures.normal.tex,
+            roughness: 1,
+            aoMap: skin_textures.ao.tex,
+            skinning: true
+        });
+
+        body_material02 =new THREE.MeshStandardMaterial();
+        body_material02.copy(body_material);
+        body_material02.skinning =false;
+        //endregion
+
+        //region *************************摄像机颜色贴图*************************************
+        var cam_Path = './model/robotTex/camera/robot_yellow.ts/';
+
+        var cam_textures={
+            'baseColor':{
+                url:cam_Path + 'cam_base_color.png',
+                tex:textureLoader.load(cam_Path + 'cam_base_color.png')
+            },
+            'metalness':{
+                url:cam_Path + 'cam_metallic.png',
+                tex:textureLoader.load(cam_Path + 'cam_metallic.png')
+            },
+            'normal':{
+                url:cam_Path + 'cam_normal.png',
+                tex:textureLoader.load(cam_Path + 'cam_normal.png')
+            },
+            'roughness':{
+                url:cam_Path + 'cam_roughness.png',
+                tex:textureLoader.load(cam_Path + 'cam_roughness.png')
+            },
+            'ao':{
+                url:cam_Path + 'cam_AO.png',
+                tex:textureLoader.load(cam_Path + 'cam_AO.png')
+            }
+        };
+
+        cam_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: cam_textures.baseColor.tex,
+            metalnessMap: cam_textures.metalness.tex,
+            metalness: 1,
+            normalMap: cam_textures.normal.tex,
+            roughnessMap: cam_textures.roughness.tex,
+            roughness: 1,
+            aoMap: cam_textures.ao.tex,
+            skinning: true
+        });
+
+        cam_material02 =new THREE.MeshStandardMaterial();
+        cam_material02.copy(cam_material);
+        cam_material02.skinning =false;
+        // endregion
+
+        //region *************************充电线贴图*************************************
+        var line_Path = './model/robotTex/liner/';
+
+        var line_textures={
+            'baseColor':{
+                url:line_Path + 'liner_liner_BaseColor.jpg',
+                tex:textureLoader.load(line_Path + 'liner_liner_BaseColor.jpg')
+            },
+            'metalness':{
+                url:line_Path + 'liner_liner_Metallic.jpg',
+                tex:textureLoader.load(line_Path + 'liner_liner_Metallic.jpg')
+            },
+            'normal':{
+                url:line_Path + 'liner_liner_Normal.jpg',
+                tex:textureLoader.load(line_Path + 'liner_liner_Normal.jpg')
+            },
+            'roughness':{
+                url:line_Path + 'liner_liner_Roughness.jpg',
+                tex:textureLoader.load(line_Path + 'liner_liner_Roughness.jpg')
+            }
+        };
+
+
+        line_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: line_textures.baseColor.tex,
+            metalnessMap: line_textures.metalness.tex,
+            metalness: 0.5,
+            normalMap: line_textures.normal.tex,
+            roughnessMap: line_textures.roughness.tex,
+            roughness: 0
+        });
+        // endregion
+
+        //region *************************传送盘贴图*************************************
+        var pan_Path = './model/robotTex/chuanshidai/chuanshidai.sp/chaushujia_pan.ts/';
+
+        var pan_textures={
+            'baseColor':{
+                url:pan_Path + 'chaushujia_pan_base_color.png',
+                tex:textureLoader.load(pan_Path + 'chaushujia_pan_base_color.png')
+            },
+            'metalness':{
+                url:pan_Path + 'chaushujia_pan_metallic.png',
+                tex:textureLoader.load(pan_Path + 'chaushujia_pan_metallic.png')
+            },
+            'normal':{
+                url:pan_Path + 'chaushujia_pan_normal.png',
+                tex:textureLoader.load(pan_Path + 'chaushujia_pan_normal.png')
+            },
+            'roughness':{
+                url:pan_Path + 'chaushujia_pan_roughness.png',
+                tex:textureLoader.load(pan_Path + 'chaushujia_pan_roughness.png')
+            },
+            'ao':{
+                url:pan_Path + 'chaushujia_pan_roughness.png',
+                tex:textureLoader.load(pan_Path + 'chaushujia_pan_roughness.png')
+            }
+        };
+
+
+        pan_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: pan_textures.baseColor.tex,
+            metalnessMap: pan_textures.metalness.tex,
+            metalness: 1,
+            normalMap: pan_textures.normal.tex,
+            roughnessMap: pan_textures.roughness.tex,
+            roughness: 1,
+            aoMap: pan_textures.ao.tex
+        });
+        // endregion
+
+        //region *************************架子贴图*************************************
+        var jaizi_Path = './model/robotTex/chuanshidai/chuanshidai.sp/jianzi_yellow.ts/';
+
+        var jiazi_textures={
+            'baseColor':{
+                url:jaizi_Path + 'jianzi_yellow_base_color.png',
+                tex:textureLoader.load(jaizi_Path + 'jianzi_yellow_base_color.png')
+            },
+            'metalness':{
+                url:jaizi_Path + 'jianzi_yellow_metallic.png',
+                tex:textureLoader.load(jaizi_Path + 'jianzi_yellow_metallic.png')
+            },
+            'normal':{
+                url:jaizi_Path + 'jianzi_yellow_normal.png',
+                tex:textureLoader.load(jaizi_Path + 'jianzi_yellow_normal.png')
+            },
+            'roughness':{
+                url:jaizi_Path + 'jianzi_yellow_roughness.png',
+                tex:textureLoader.load(jaizi_Path + 'jianzi_yellow_roughness.png')
+            },
+            'ao':{
+                url:jaizi_Path + 'jianzi_yellow_roughness.png',
+                tex:textureLoader.load(jaizi_Path + 'jianzi_yellow_roughness.png')
+            }
+        };
+
+
+        jiazi01_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: jiazi_textures.baseColor.tex,
+            metalnessMap: jiazi_textures.metalness.tex,
+            metalness: 0.5,
+            normalMap: jiazi_textures.normal.tex,
+            roughnessMap: jiazi_textures.roughness.tex,
+            roughness: 0.5,
+            aoMap: jiazi_textures.ao.tex
+        });
+        // endregion
+
+        //region *************************架子贴图02*************************************
+        var jiazi02_Path = './model/robotTex/chuanshidai/chuanshidai.sp/jiazi_blue.ts/';
+
+        var jiazi02_textures={
+            'baseColor':{
+                url:jiazi02_Path + 'jiazi_blue_base_color.png',
+                tex:textureLoader.load(jiazi02_Path + 'jiazi_blue_base_color.png')
+            },
+            'metalness':{
+                url:jiazi02_Path + 'jiazi_blue_metallic.png',
+                tex:textureLoader.load(jiazi02_Path + 'jiazi_blue_metallic.png')
+            },
+            'normal':{
+                url:jiazi02_Path + 'jiazi_blue_normal.png',
+                tex:textureLoader.load(jiazi02_Path + 'jiazi_blue_normal.png')
+            },
+            'roughness':{
+                url:jiazi02_Path + 'jiazi_blue_roughness.png',
+                tex:textureLoader.load(jiazi02_Path + 'jiazi_blue_roughness.png')
+            },
+            'ao':{
+                url:jiazi02_Path + 'jiazi_blue_AO.png',
+                tex:textureLoader.load(jiazi02_Path + 'jiazi_blue_AO.png')
+            }
+        };
+
+        jiazi02_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: jiazi02_textures.baseColor.tex,
+            metalnessMap: jiazi02_textures.metalness.tex,
+            metalness: 0.5,
+            normalMap: jiazi02_textures.normal.tex,
+            roughnessMap: jiazi02_textures.roughness.tex,
+            roughness: 0.5,
+            aoMap: jiazi02_textures.ao.tex
+        });
+        // endregion
+
+        //region *************************传送带*************************************
+        var dai_Path = './model/robotTex/chuanshidai/chuanshidai.sp/chuanshulian/';
+
+        var dai_textures={
+            'baseColor':{
+                url:dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_BaseColor.png',
+                tex:textureLoader.load(dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_BaseColor.png',function (tex) {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                })
+            },
+            'metalness':{
+                url:dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Metallic.png',
+                tex:textureLoader.load(dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Metallic.png',function (tex) {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                })
+            },
+            'normal':{
+                url:dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Normal.png',
+                tex:textureLoader.load(dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Normal.png',function (tex) {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                })
+            },
+            'roughness':{
+                url:dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Roughness.png',
+                tex:textureLoader.load(dai_Path + 'chuanshudai_daizi_pasted__VRayMtl1_Roughness.png',function (tex) {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                })
+            }
+        };
+
+        texture =dai_textures.baseColor.tex;
+
+        chuanshudai_material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            map: texture,
+            metalnessMap: dai_textures.metalness.tex,
+            metalness: 0.5,
+            normalMap: dai_textures.normal.tex,
+            roughnessMap: dai_textures.roughness.tex,
+            roughness: 0.5
+        });
+        // endregion
+
+        model.traverse(function (child) {
+            //selectedObjects.push(child);//全部渲染
+            if(child.type == 'Object3D'){
+
+            }
+
+            //骨骼动画模型
+            if(child.type == "SkinnedMesh"){
+
+                if(child.material.name == "body"){
+                    child.material= body_material;
+                }
+
+                if(child.material.name == 'material'){
+                    child.material= cam_material;
+                }
+            }
+            if(child.type == "Mesh"){
+
+                if(child.material.name == 'body'){
+                    child.material= body_material02;
+                }
+
+                if(child.material.name == 'material'){
+                    child.material= cam_material02;
+                }
+
+                if(child.material.name == 'liner'){
+                    child.material= line_material;
+                }
+
+                if(child.material.name == 'material_3'){
+                    child.material= pan_material;
+                }
+
+                if(child.material.name == 'jiazi_yellow'){
+                    child.material= jiazi01_material;
+                }
+
+                if(child.material.name == 'jiazhi_blue'){
+                    child.material= jiazi02_material;
+                }
+
+                if(child.material.name == 'chaunshulian'){
+                    child.material= chuanshudai_material;
+                }
+            }
+
+        },false);
+    }
+
+    //模型居中计算
+    function GroupCentre(group) {
+        var box = new THREE.Box3();
+        //通过传入的object3D对象来返回当前模型的最小大小，值可以使一个mesh也可以使group
+        box.expandByObject(group);
+
+        var mdlen = box.max.x - box.min.x;
+        var mdwid = box.max.z - box.min.z;
+        var mdhei = box.max.y - box.min.y;
+        var centerpoint = new THREE.Vector3();
+        var x1 = box.min.x + mdlen / 2;
+        var y1 = box.min.y + mdhei / 2;
+        var z1 = box.min.z + mdwid / 2;
+
+        return new THREE.Vector3(-x1, -y1, -z1)
+
+    }
+
+    function BoundingBox(obj) {
+        var box = new THREE.BoxHelper(obj,0xffff00);
+        scene.add(box);
+    }
+
+    function CreateLine(point1,point2) {
+        var lineGeometry = new THREE.Geometry();
+        var lineMaterial = new THREE.LineBasicMaterial({color:0x00ff00,linewidth: 0.1, linecap: 'round',linejoin:  'round' });
+
+        lineGeometry.vertices.push(point1,point2);
+        line = new THREE.Line(lineGeometry,lineMaterial);
+
+        scene.add(line);
+    }
+
+
+  </script>
+
+</body>
+
+</html>
